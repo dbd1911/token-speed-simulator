@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Token Speed Simulator — What does 50–80 tok/s feel like?</title>
+<style>
+:root{--ink:#0C0F0E;--panel:#1A211E;--panel2:#212925;--line:#2E3833;--paper:#F2F4F2;--mut:#9FB0A8;--dim:#6E7F77;--gold:#C9A227;--gold2:#E3B93A;--ok:#6FBF8E;--warn:#E0A63C;--crit:#E86A5E;--info:#7FB5D8;--mono:'Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--paper);font-family:'Segoe UI',sans-serif;line-height:1.6;padding:28px 20px 60px}
+.wrap{max-width:980px;margin:0 auto}
+h1{font-size:26px;letter-spacing:.02em;margin-bottom:6px}
+.sub{color:var(--mut);font-size:14.5px;margin-bottom:26px}
+.sub b{color:var(--gold2)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin-bottom:18px}
+.presets{display:flex;flex-wrap:wrap;gap:8px}
+.pbtn{font-family:var(--mono,'Consolas');font-size:12px;padding:9px 13px;border-radius:7px;border:1px solid var(--line);background:var(--ink);color:var(--mut);cursor:pointer;transition:all .15s}
+.pbtn:hover{border-color:var(--gold);color:var(--gold2)}
+.pbtn.act{background:var(--gold);color:var(--ink);border-color:var(--gold);font-weight:600}
+.readout{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+.ro{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.ro-n{font-size:26px;font-weight:700;color:var(--gold2);line-height:1.1}
+.ro-l{font-family:var(--mono),monospace;font-size:10px;letter-spacing:.1em;color:var(--dim);margin-top:4px}
+.stream{background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-height:130px;font-size:15.5px;color:#D5DDD8}
+.stream .cursor{display:inline-block;width:9px;height:18px;background:var(--gold);vertical-align:text-bottom;animation:bl .8s infinite}
+@keyframes bl{50%{opacity:0}}
+.done{color:var(--ok);font-size:13px;margin-top:10px;font-family:var(--mono),monospace;display:none}
+.bars{margin-top:6px}
+.brow{display:grid;grid-template-columns:210px 1fr 90px;align-items:center;gap:10px;margin:9px 0}
+.blabel{font-size:13px;color:var(--mut);text-align:right}
+.blabel small{color:var(--dim);display:block;font-size:11px}
+.btrack{background:var(--panel2);border-radius:4px;height:16px;overflow:hidden;position:relative}
+.bfill{height:100%;background:linear-gradient(90deg,#4B5320,#C9A227);border-radius:4px;transition:width .6s ease}
+.btrack .you{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--crit)}
+.bval{font-family:var(--mono),monospace;font-size:12px;color:var(--mut)}
+.scale-note{font-size:12.5px;color:var(--dim);margin-top:10px}
+.hline{border-top:1px dashed var(--line);margin:14px 0}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+.tbl th{font-family:var(--mono),monospace;font-size:10.5px;letter-spacing:.08em;color:var(--dim);text-align:left;padding:8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:8px;border-bottom:1px solid var(--line);color:var(--mut)}
+.tbl td b{color:var(--paper)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>⚡ Token Speed Simulator</h1>
+<p class="sub">Watch an RMF answer stream at real hardware speeds. <b>Human reading ≈ 5 tok/s</b> — so anything above ~30 lands faster than you can read it. Calibrate: the Hermes replies you're reading right now stream at roughly the "Mac Studio" tier.</p>
+
+<div class="panel">
+  <div class="presets" id="presets"></div>
+  <div class="readout">
+    <div class="ro"><div class="ro-n" id="r-tps">—</div><div class="ro-l">TOK/SEC</div></div>
+    <div class="ro"><div class="ro-n" id="r-tok">0</div><div class="ro-l">TOKENS</div></div>
+    <div class="ro"><div class="ro-n" id="r-words">—</div><div class="ro-l">WORDS</div></div>
+    <div class="ro"><div class="ro-n" id="r-eta">—</div><div class="ro-l">ETA THIS PARAGRAPH</div></div>
+  </div>
+  <div id="stream" class="stream"><span class="ph" style="color:var(--dim)">Pick a machine above — the paragraph will stream here.</span><span class="cursor" style="display:none"></span></div>
+  <div class="done" id="doneMsg"></div>
+</div>
+
+<div class="panel">
+  <h3 style="font-size:16px;margin-bottom:12px">The scale (tokens/sec, log-ish)</h3>
+  <div class="bars" id="bars"></div>
+  <p class="scale-note">Red marker = the speed you select · Reading speed: average adult ≈ 238 words/min ≈ 5 tok/s · Groq-class serves small models at 500–1,000+ tok/s but that's cloud, not home.</p>
+</div>
+
+<div class="panel">
+  <h3 style="font-size:16px;margin-bottom:4px">Time to write a full answer (300 words ≈ 400 tokens)</h3>
+  <table class="tbl" id="ttt"></table>
+  <div class="hline"></div>
+  <p class="scale-note"><b style="color:var(--ok)">Verdict:</b> 50–80 tok/s = a 300-word RMF paragraph in 5–8 seconds — faster than you can read it, and the same tier you're experiencing in this chat. 20 tok/s feels deliberate; 5 feels broken; 124+ feels like the machine is finishing your sentences.</p>
+</div>
+</div>
+<script>
+const SAMPLE = "A POA&M is a formal risk-acceptance document: each entry records a known weakness, the named owner, dated and verifiable milestones, and the compensating posture that protects the mission while the gap remains open. The Authorizing Official reads it to decide how much open risk the program carries — weak entries read like wishes; strong entries read like promises with dates on them.";
+const TOK_RATIO = 1.33; // tokens per word
+const PRESETS = [
+  {n:"Your PC (CPU qwen 7B)", v:4.8,  c:"#E86A5E", note:"benchmark on your i7 today"},
+  {n:"Human reading",         v:5.5,  c:"#6E7F77", note:"avg adult ≈ 238 wpm"},
+  {n:"Strix Halo · Qwen3-30B",v:65,   c:"#7FB5D8", note:"$2.5K mini-PC"},
+  {n:"Mac Studio M3 Ultra · GLM-4.5-Air",v:50, c:"#E3B93A", note:"$10K, silent"},
+  {n:"Mac Studio M3 Ultra · gpt-oss-120B",v:70,c:"#E3B93A", note:"$10K, silent"},
+  {n:"3×3090 · gpt-oss-120B", v:124,  c:"#6FBF8E", note:"$5K, loud + hot"},
+  {n:"Groq cloud · 8B",       v:750,  c:"#9FB0A8", note:"cloud, not home"},
+];
+let tok = 0, timer = null, t0 = 0, active = null, words = SAMPLE.split(" ");
+const streamEl = document.getElementById('stream'), doneEl = document.getElementById('doneMsg');
+const totalTok = Math.round(words.length * TOK_RATIO);
+
+function fmt(x){ return x>=100 ? Math.round(x) : x.toFixed(1); }
+function renderPresets(){
+  document.getElementById('presets').innerHTML = PRESETS.map((p,i)=>
+    `<button class="pbtn" data-i="${i}">${p.n} · ${p.v} tok/s</button>`).join('');
+  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>start(Number(b.dataset.i)));
+}
+function renderBars(){
+  const max = Math.log10(800), min = Math.log10(3);
+  document.getElementById('bars').innerHTML = PRESETS.map(p=>{
+    const w = Math.max(2, Math.min(100, (Math.log10(p.v)-min)/(max-min)*100));
+    return `<div class="brow"><div class="blabel">${p.n}<small>${p.note||''}</small></div>
+    <div class="btrack"><div class="bfill" style="width:${w}%;background:${p.c}"></div></div>
+    <div class="bval">${p.v} t/s</div></div>`;
+  }).join('');
+}
+function renderTable(){
+  const rows = PRESETS.filter(p=>p.v<700).map(p=>{
+    const s = 400/p.v;
+    return `<tr><td><b>${p.n}</b></td><td>${p.v} tok/s</td><td>${s<1?'&lt;1':s.toFixed(0)} s</td></tr>`;
+  }).join('');
+  document.getElementById('ttt').innerHTML = '<tr><th>SYSTEM</th><th>SPEED</th><th>300-WORD ANSWER</th></tr>'+rows;
+}
+function run(i){
+  clearInterval(timer); active = PRESETS[i];
+  document.getElementById('r-tps').textContent = fmt(active.v);
+  document.querySelectorAll('.pbtn').forEach((b,j)=>b.classList.toggle('act', j===i));
+  tok = 0; t0 = performance.now();
+  streamEl.innerHTML = '<span id="txt"></span><span class="cursor" style="display:inline-block;width:9px;height:16px;background:var(--gold);vertical-align:text-bottom;animation:bl .7s infinite"></span>';
+  doneEl.style.display = 'none';
+  document.getElementById('r-eta').textContent = (totalTokCalc()/active.v).toFixed(1)+' s';
+  timer = setInterval(()=>{
+    tok += active.v * 0.05; // 50ms tick
+    const wordIdx = Math.min(words.length, Math.floor(tok / TOK_RATIO));
+    document.getElementById('txt').textContent = words.slice(0, wordIdx).join(' ');
+    document.getElementById('r-tok').textContent = Math.round(tok);
+    document.getElementById('r-words').textContent = wordIdx;
+    const el = (performance.now()-t0)/1000;
+    document.getElementById('r-eta').textContent = Math.max(0,(totalTokCalc()-tok)/active.v).toFixed(1)+'s';
+    if (tok >= totalTokCalc()){ clearInterval(timer); finish(); }
+  }, 50);
+}
+function totalTokCalc(){ return words.length * TOK_RATIO; }
+function finish(){
+  const secs = (performance.now()-t0)/1000, w = words.length;
+  const readTime = w / (238/60);
+  doneEl.style.display = 'block';
+  doneEl.innerHTML = `✓ ${w} words in ${secs.toFixed(1)}s at ${active.v} tok/s — reading it aloud yourself would take ~${readTime.toFixed(1)}s (${(readTime/Math.max(secs,.01)).toFixed(1)}× faster than a human speaker).`;
+}
+document.getElementById('r-tok').parentElement; // noop
+new ResizeObserver(()=>{}); // noop
+document.getElementById('r-words').textContent = '—';
+document.getElementById('r-eta').textContent = '—';
+renderPresets(); renderBars(); renderTable();
+// auto-start at Mac Studio tier for instant demo
+setTimeout(()=>run(4), 300);
+</script>
+</body>
+</html>
