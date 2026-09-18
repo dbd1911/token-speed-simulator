@@ -91,7 +91,7 @@ function fmt(x){ return x>=100 ? Math.round(x) : x.toFixed(1); }
 function renderPresets(){
   document.getElementById('presets').innerHTML = PRESETS.map((p,i)=>
     `<button class="pbtn" data-i="${i}">${p.n} · ${p.v} tok/s</button>`).join('');
-  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>start(Number(b.dataset.i)));
+  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>run(Number(b.dataset.i)));
 }
 function renderBars(){
   const max = Math.log10(800), min = Math.log10(3);
